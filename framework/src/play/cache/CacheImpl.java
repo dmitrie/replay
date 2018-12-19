@@ -8,20 +8,11 @@ import java.util.Map;
  * @see play.cache.Cache
  */
 public interface CacheImpl {
-
-    public void add(String key, Object value, int expiration);
-
     public void set(String key, Object value, int expiration);
-
-    public void replace(String key, Object value, int expiration);
 
     public Object get(String key);
 
     public Map<String, Object> get(String[] keys);
-
-    public long incr(String key, int by);
-
-    public long decr(String key, int by);
 
     public void clear();
 

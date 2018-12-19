@@ -128,11 +128,6 @@ public class MemcachedImpl implements CacheImpl {
     }
 
     @Override
-    public void add(String key, Object value, int expiration) {
-        client.add(key, expiration, value, tc);
-    }
-
-    @Override
     public Object get(String key) {
         Future<Object> future = client.asyncGet(key, tc);
         try {
@@ -162,21 +157,6 @@ public class MemcachedImpl implements CacheImpl {
             future.cancel(false);
         }
         return emptyMap();
-    }
-
-    @Override
-    public long incr(String key, int by) {
-        return client.incr(key, by, 0);
-    }
-
-    @Override
-    public long decr(String key, int by) {
-        return client.decr(key, by, 0);
-    }
-
-    @Override
-    public void replace(String key, Object value, int expiration) {
-        client.replace(key, expiration, value, tc);
     }
 
     @Override

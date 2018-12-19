@@ -9,7 +9,10 @@ import play.Play;
 
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
+import static org.assertj.core.api.Assertions.fail;
 import static org.ehcache.config.ResourceType.Core.HEAP;
 import static org.ehcache.config.ResourceType.Core.OFFHEAP;
 
@@ -33,15 +36,6 @@ public class EhCacheImplTest {
         cache.set("setAndGet", 1, 1);
 
         assertThat(cache.get("setAndGet")).isEqualTo(1);
-    }
-
-    @Test
-    public void addAddsAnObjectOnlyIfItDoesNotExistAlready() {
-        cache.set("add", 1, 1);
-
-        cache.add("add", 2, 1);
-
-        assertThat(cache.get("add")).isEqualTo(1);
     }
 
     @Test
@@ -76,17 +70,6 @@ public class EhCacheImplTest {
     }
 
     @Test
-    public void replace() throws InterruptedException {
-        cache.set("replace", 1, 1);
-        cache.replace("replace", 2, 2);
-
-        assertThat(cache.get("replace")).isEqualTo(2);
-
-        Thread.sleep(1000);
-        assertThat(cache.get("replace")).isEqualTo(2);
-    }
-
-    @Test
     public void stop() {
         try {
             cache.stop();
@@ -97,27 +80,6 @@ public class EhCacheImplTest {
         finally {
             EhCacheImpl.newInstance();
         }
-    }
-
-    @Test
-    public void verifyThatTTLSurvivesIncrDecr() throws Exception {
-        String key = "EhCacheImplTest_verifyThatTTLSurvivesIncrDecr";
-
-        int expiration = 1;
-
-        cache.add(key, 1, expiration);
-        Thread.sleep(100);
-        cache.incr(key, 4);
-
-        Thread.sleep(100);
-        cache.decr(key, 3);
-
-        Thread.sleep(950);
-        assertThat(cache.get(key)).isEqualTo(2L);
-
-        //no make sure it disappear after the 1 sec + 100 mils
-        Thread.sleep(150);
-        assertThat(cache.get(key)).isNull();
     }
 
     @Test

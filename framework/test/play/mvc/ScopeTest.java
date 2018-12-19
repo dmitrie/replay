@@ -12,6 +12,7 @@ import play.mvc.Scope.Flash;
 import play.mvc.Scope.Params;
 import play.mvc.Scope.Session;
 
+import java.math.BigDecimal;
 import java.util.Properties;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -281,6 +282,63 @@ public class ScopeTest {
     }
 
     @Test
+    public void flashPut() {
+        Flash flash = new Flash();
+
+        flash.put("string", "value");
+        assertEquals("value", flash.get("string"));
+
+        flash.put("integer", Integer.MAX_VALUE);
+        assertEquals("2147483647", flash.get("integer"));
+
+        flash.put("long", Long.MAX_VALUE);
+        assertEquals("9223372036854775807", flash.get("long"));
+
+        flash.put("bigDecimal", new BigDecimal("12.34"));
+        assertEquals("12.34", flash.get("bigDecimal"));
+
+        flash.put("booleanTrue", true);
+        assertEquals("true", flash.get("booleanTrue"));
+
+        flash.put("booleanFalse", false);
+        assertEquals("false", flash.get("booleanFalse"));
+
+        flash.put("enum", TestEnum.B);
+        assertEquals("B", flash.get("enum"));
+    }
+
+    @Test
+    public void flashPutNulls() {
+        Flash flash = new Flash();
+
+        flash.put("string", (String) null);
+        assertNull(flash.get("string"));
+
+        flash.put("integer", (Integer) null);
+        assertNull(flash.get("integer"));
+
+        flash.put("long", (Long) null);
+        assertNull(flash.get("long"));
+
+        flash.put("bigDecimal", (BigDecimal) null);
+        assertNull(flash.get("bigDecimal"));
+
+        flash.put("boolean", (Boolean) null);
+        assertNull(flash.get("boolean"));
+
+        flash.put("enum", (Enum<?>) null);
+        assertNull(flash.get("enum"));
+    }
+
+    private enum TestEnum {
+        A, B;
+
+        @Override public String toString() {
+            return "to string";
+        }
+    }
+
+    @Test
     public void containsReturnsTrueWhenOnlyParameterNameIsQueryString() {
         request.querystring = "&name&name2";
         Params params = new Params(request);
@@ -336,5 +394,16 @@ public class ScopeTest {
         assertThat(flash.data).isEmpty();
         assertThat(flash.out).isEmpty();
         verifyNoMoreInteractions(Scope.Flash.signer);
+    }
+
+    @Test
+    public void containsFiles() {
+        request.args.put("__UPLOADS", "file");
+        assertThat(request.params.containsFiles()).isTrue();
+    }
+
+    @Test
+    public void containsFiles_false() {
+        assertThat(request.params.containsFiles()).isFalse();
     }
 }

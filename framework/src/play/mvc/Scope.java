@@ -15,9 +15,11 @@ import play.libs.Codec;
 import play.libs.Signer;
 import play.utils.Utils;
 
+import javax.annotation.Nullable;
 import java.io.ByteArrayInputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.util.Collection;
 import java.util.HashMap;
@@ -135,11 +137,24 @@ public class Scope {
             out.put(key, value);
         }
 
-        public void put(String key, Object value) {
-            if (value == null) {
-                put(key, (String) null);
-            }
-            put(key, String.valueOf(value));
+        public void put(String key, Integer value) {
+            put(key, value == null ? null : value.toString());
+        }
+
+        public void put(String key, Long value) {
+            put(key, value == null ? null : value.toString());
+        }
+
+        public void put(String key, Boolean value) {
+            put(key, value == null ? null : value.toString());
+        }
+
+        public void put(String key, BigDecimal value) {
+            put(key, value == null ? null : value.toPlainString());
+        }
+
+        public void put(String key, Enum<?> value) {
+            put(key, value == null ? null : value.name());
         }
 
         public void now(String key, String value) {
@@ -388,7 +403,7 @@ public class Scope {
             requestIsParsed = true;
         }
 
-        public void put(String key, String value) {
+        public void put(String key, @Nullable String value) {
             checkAndParse();
             data.put(key, new String[] { value });
             // make sure rootsParamsNode is regenerated if needed
@@ -438,6 +453,11 @@ public class Scope {
         public boolean contains(String key) {
             checkAndParse();
             return data.containsKey(key);
+        }
+
+        public boolean containsFiles() {
+            checkAndParse();
+            return request.args.containsKey("__UPLOADS");
         }
 
         public String[] getAll(String key) {
