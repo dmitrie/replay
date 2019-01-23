@@ -3,11 +3,9 @@ package play.mvc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import play.Play;
-import play.data.binding.Binder;
 import play.data.parsing.DataParser;
 import play.data.parsing.DataParsers;
 import play.data.parsing.UrlEncodedParser;
-import play.data.validation.Validation;
 import play.exceptions.UnexpectedException;
 import play.i18n.Messages;
 import play.inject.Injector;
@@ -15,16 +13,17 @@ import play.libs.Codec;
 import play.libs.Signer;
 import play.utils.Utils;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.ByteArrayInputStream;
 import java.io.UnsupportedEncodingException;
-import java.lang.annotation.Annotation;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import static java.lang.String.join;
 import static java.util.Arrays.asList;
@@ -33,7 +32,7 @@ import static java.util.Arrays.asList;
  * All application Scopes
  */
 public class Scope {
-    static SessionDataEncoder encoder = new SessionDataEncoder();
+    private static final SessionDataEncoder encoder = new SessionDataEncoder();
 
     private static final Logger logger = LoggerFactory.getLogger(Scope.class);
 
@@ -70,7 +69,8 @@ public class Scope {
         Map<String, String> data = new HashMap<>();
         Map<String, String> out = new HashMap<>();
 
-        public static Flash restore(Http.Request request) {
+        @Nonnull
+        public static Flash restore(@Nonnull Http.Request request) {
             Flash flash = new Flash();
             Http.Cookie cookie = request.cookies.get(COOKIE_PREFIX + "_FLASH");
             if (cookie != null) {
@@ -90,7 +90,7 @@ public class Scope {
             return flash;
         }
 
-        public void save(Http.Request request, Http.Response response) {
+        public void save(@Nonnull Http.Request request, @Nullable Http.Response response) {
             if (response == null) {
                 // Some request like WebSocket don't have any response
                 return;
@@ -125,54 +125,57 @@ public class Scope {
         public static final ThreadLocal<Flash> current = new ThreadLocal<>();
 
         @Deprecated
+        @Nonnull
         public static Flash current() {
             return current.get();
         }
 
-        public void put(String key, String value) {
-            if (key.contains(":")) {
-                throw new IllegalArgumentException("Character ':' is invalid in a flash key.");
-            }
+        public void put(@Nonnull String key, @Nullable String value) {
+            validateKey(key);
             data.put(key, value);
             out.put(key, value);
         }
 
-        public void put(String key, Integer value) {
+        public void put(@Nonnull String key, @Nullable Integer value) {
             put(key, value == null ? null : value.toString());
         }
 
-        public void put(String key, Long value) {
+        public void put(@Nonnull String key, @Nullable Long value) {
             put(key, value == null ? null : value.toString());
         }
 
-        public void put(String key, Boolean value) {
+        public void put(@Nonnull String key, @Nullable Boolean value) {
             put(key, value == null ? null : value.toString());
         }
 
-        public void put(String key, BigDecimal value) {
+        public void put(@Nonnull String key, @Nullable BigDecimal value) {
             put(key, value == null ? null : value.toPlainString());
         }
 
-        public void put(String key, Enum<?> value) {
-            put(key, value == null ? null : value.name());
+        public void put(@Nonnull String key, @Nonnull Enum<?> value) {
+            put(key, value.name());
         }
 
-        public void now(String key, String value) {
-            if (key.contains(":")) {
-                throw new IllegalArgumentException("Character ':' is invalid in a flash key.");
-            }
+        public void now(@Nonnull String key, @Nonnull  String value) {
+            validateKey(key);
             data.put(key, value);
         }
 
-        public void error(String value, Object... args) {
+        private void validateKey(@Nonnull String key) {
+            if (key.contains(":")) {
+                throw new IllegalArgumentException("Character ':' is invalid in a flash key.");
+            }
+        }
+
+        public void error(@Nonnull String value, Object... args) {
             put("error", Messages.get(value, args));
         }
 
-        public void success(String value, Object... args) {
+        public void success(@Nonnull String value, Object... args) {
             put("success", Messages.get(value, args));
         }
 
-        public void discard(String key) {
+        public void discard(@Nonnull String key) {
             out.remove(key);
         }
 
@@ -180,7 +183,7 @@ public class Scope {
             out.clear();
         }
 
-        public void keep(String key) {
+        public void keep(@Nonnull String key) {
             if (data.containsKey(key)) {
                 out.put(key, data.get(key));
             }
@@ -190,11 +193,12 @@ public class Scope {
             out.putAll(data);
         }
 
-        public String get(String key) {
+        @Nullable
+        public String get(@Nonnull String key) {
             return data.get(key);
         }
 
-        public boolean remove(String key) {
+        public boolean remove(@Nonnull String key) {
             return data.remove(key) != null;
         }
 
@@ -202,11 +206,12 @@ public class Scope {
             data.clear();
         }
 
-        public boolean contains(String key) {
+        public boolean contains(@Nonnull String key) {
             return data.containsKey(key);
         }
 
         @Override
+        @Nonnull
         public String toString() {
             return data.toString();
         }
@@ -223,11 +228,12 @@ public class Scope {
         protected static final String UA_KEY = "___UA";
         private static final Signer signer = new Signer("auth-token");
 
-        public static Session restore(Http.Request request, Http.Response response) {
+        @Nonnull
+        public static Session restore(@Nonnull Http.Request request) {
             Session session = sessionStore.restore(request);
             String storedUserAgent = session.get(UA_KEY);
             String requestUserAgent = getUserAgent(request);
-            if (storedUserAgent != null && !requestUserAgent.equals(storedUserAgent)) {
+            if (storedUserAgent != null && !Objects.equals(requestUserAgent, storedUserAgent)) {
                 logger.warn(String.format("User agent changed: existing user agent '%s', request user agent '%s'",
                                   storedUserAgent, requestUserAgent));
             }
@@ -241,6 +247,7 @@ public class Scope {
         public static final ThreadLocal<Session> current = new ThreadLocal<>();
 
         @Deprecated
+        @Nullable
         public static Session current() {
             return current.get();
         }
@@ -249,6 +256,7 @@ public class Scope {
             current.remove();
         }
 
+        @Nonnull
         public String getId() {
             if (!data.containsKey(ID_KEY)) {
                 this.put(ID_KEY, Codec.UUID());
@@ -257,10 +265,12 @@ public class Scope {
 
         }
 
+        @Nonnull
         public Map<String, String> all() {
             return data;
         }
 
+        @Nonnull
         public String getAuthenticityToken() {
             if (!data.containsKey(AT_KEY)) {
                 this.put(AT_KEY, signer.sign(Codec.UUID()));
@@ -272,19 +282,20 @@ public class Scope {
             changed = true;
         }
 
-        public void save(Http.Request request, Http.Response response) {
+        public void save(@Nonnull Http.Request request, @Nullable Http.Response response) {
             if (!isEmpty() && !contains(UA_KEY)) {
                 put(UA_KEY, getUserAgent(request));
             }
             sessionStore.save(this, request, response);
         }
 
-        private static String getUserAgent(Http.Request request) {
+        @Nullable
+        private static String getUserAgent(@Nonnull Http.Request request) {
             Http.Header agent = request.headers.get("user-agent");
             return agent != null ? agent.value() : "n/a";
         }
 
-        public void put(String key, String value) {
+        public void put(@Nonnull String key, @Nullable String value) {
             if (key.contains(":")) {
                 throw new IllegalArgumentException("Character ':' is invalid in a session key.");
             }
@@ -296,7 +307,7 @@ public class Scope {
             }
         }
 
-        public void put(String key, Object value) {
+        public void put(@Nonnull String key, @Nullable Object value) {
             change();
             if (value == null) {
                 put(key, (String) null);
@@ -305,16 +316,17 @@ public class Scope {
             }
         }
 
-        public String get(String key) {
+        @Nullable
+        public String get(@Nonnull String key) {
             return data.get(key);
         }
 
-        public boolean remove(String key) {
+        public boolean remove(@Nonnull String key) {
             change();
             return data.remove(key) != null;
         }
 
-        public void remove(String... keys) {
+        public void remove(@Nonnull String... keys) {
             for (String key : keys) {
                 remove(key);
             }
@@ -341,11 +353,12 @@ public class Scope {
             return true;
         }
 
-        public boolean contains(String key) {
+        public boolean contains(@Nonnull String key) {
             return data.containsKey(key);
         }
 
         @Override
+        @Nonnull
         public String toString() {
             return data.toString();
         }
@@ -358,19 +371,17 @@ public class Scope {
         private static final ThreadLocal<Params> current = new ThreadLocal<>();
 
         @Deprecated
+        @Nonnull
         public static Params current() {
             return current.get();
         }
 
         @Deprecated
-        public static void setCurrent(Params params) {
+        public static void setCurrent(@Nonnull Params params) {
             current.set(params);
         }
 
-        public Params(Http.Request request) {
-            if (request == null) {
-                throw new UnexpectedException("Current request undefined");
-            }
+        public Params(@Nonnull Http.Request request) {
             this.request = request;
         }
 
@@ -403,35 +414,29 @@ public class Scope {
             requestIsParsed = true;
         }
 
-        public void put(String key, @Nullable String value) {
+        public void put(@Nonnull String key, @Nullable String value) {
             checkAndParse();
             data.put(key, new String[] { value });
             // make sure rootsParamsNode is regenerated if needed
             rootParamsNodeIsGenerated = false;
         }
 
-        public void put(String key, String[] values) {
+        public void put(@Nonnull String key, @Nonnull String[] values) {
             checkAndParse();
             data.put(key, values);
             // make sure rootsParamsNode is regenerated if needed
             rootParamsNodeIsGenerated = false;
         }
 
-        public void remove(String key) {
+        public void remove(@Nonnull String key) {
             checkAndParse();
             data.remove(key);
             // make sure rootsParamsNode is regenerated if needed
             rootParamsNodeIsGenerated = false;
         }
 
-        public void removeStartWith(String prefix) {
-            checkAndParse();
-            data.entrySet().removeIf(entry -> entry.getKey().startsWith(prefix));
-            // make sure rootsParamsNode is regenerated if needed
-            rootParamsNodeIsGenerated = false;
-        }
-
-        public String get(String key) {
+        @Nullable
+        public String get(@Nonnull String key) {
             checkAndParse();
             if (data.containsKey(key)) {
                 return data.get(key)[0];
@@ -439,18 +444,7 @@ public class Scope {
             return null;
         }
 
-        @SuppressWarnings("unchecked")
-        public <T> T get(Http.Request request, Session session, Annotation[] annotations, String key, Class<T> type) {
-            try {
-                return (T) Binder.directBind(request, session, annotations, get(key), type, null);
-            } catch (Exception e) {
-                logger.error("Failed to get {} of type {}", key, type, e);
-                Validation.addError(key, "validation.invalid");
-                return null;
-            }
-        }
-
-        public boolean contains(String key) {
+        public boolean contains(@Nonnull String key) {
             checkAndParse();
             return data.containsKey(key);
         }
@@ -460,28 +454,19 @@ public class Scope {
             return request.args.containsKey("__UPLOADS");
         }
 
-        public String[] getAll(String key) {
+        @Nullable
+        public String[] getAll(@Nonnull String key) {
             checkAndParse();
             return data.get(key);
         }
 
+        @Nonnull
         public Map<String, String[]> all() {
             checkAndParse();
             return data;
         }
 
-        public Map<String, String[]> sub(String prefix) {
-            checkAndParse();
-            Map<String, String[]> result = new LinkedHashMap<>();
-            for (Map.Entry<String, String[]> entry : data.entrySet()) {
-                String key = entry.getKey();
-                if (key.startsWith(prefix + ".")) {
-                    result.put(key.substring(prefix.length() + 1), entry.getValue());
-                }
-            }
-            return result;
-        }
-
+        @Nonnull
         public Map<String, String> allSimple() {
             checkAndParse();
             Map<String, String> result = new HashMap<>();
@@ -491,19 +476,20 @@ public class Scope {
             return result;
         }
 
-        void _mergeWith(Map<String, String[]> map) {
+        private void _mergeWith(@Nonnull Map<String, String[]> map) {
             for (Map.Entry<String, String[]> entry : map.entrySet()) {
                 Utils.Maps.mergeValueInMap(data, entry.getKey(), entry.getValue());
             }
         }
 
-        void __mergeWith(Map<String, String> map) {
+        private void __mergeWith(@Nonnull Map<String, String> map) {
             for (Map.Entry<String, String> entry : map.entrySet()) {
                 Utils.Maps.mergeValueInMap(data, entry.getKey(), entry.getValue());
             }
         }
 
-        public String urlEncode(Http.Response response) {
+        @Nonnull
+        public String urlEncode(@Nonnull Http.Response response) {
             checkAndParse();
             String encoding = response.encoding;
             StringBuilder ue = new StringBuilder();
@@ -523,7 +509,7 @@ public class Scope {
             return ue.toString();
         }
 
-        public void flash(Flash flash, String... params) {
+        public void flash(@Nonnull Flash flash, @Nonnull String... params) {
             Collection<String> keys = params.length == 0 ? all().keySet() : asList(params);
             for (String key : keys) {
                 flash.put(key, join(",", data.get(key)));
@@ -531,6 +517,7 @@ public class Scope {
         }
 
         @Override
+        @Nonnull
         public String toString() {
             return data.toString();
         }
@@ -541,12 +528,13 @@ public class Scope {
      */
     public static class RenderArgs {
 
-        public Map<String, Object> data = new HashMap<>(); // ThreadLocal access
+        public final Map<String, Object> data = new HashMap<>(); // ThreadLocal access
 
         @Deprecated
         public static final ThreadLocal<RenderArgs> current = new ThreadLocal<>();
 
         @Deprecated
+        @Nonnull
         public static RenderArgs current() {
             return current.get();
         }
@@ -555,20 +543,22 @@ public class Scope {
             current.remove();
         }
 
-        public void put(String key, Object arg) {
+        public void put(@Nonnull String key, @Nullable Object arg) {
             this.data.put(key, arg);
         }
 
-        public Object get(String key) {
+        @Nullable
+        public Object get(@Nonnull String key) {
             return data.get(key);
         }
 
-        @SuppressWarnings("unchecked")
+        @Nullable @SuppressWarnings("unchecked")
         public <T> T get(String key, Class<T> clazz) {
             return (T) this.get(key);
         }
 
         @Override
+        @Nonnull
         public String toString() {
             return data.toString();
         }
@@ -579,7 +569,7 @@ public class Scope {
      */
     public static class RouteArgs {
 
-        public Map<String, Object> data = new HashMap<>(); // ThreadLocal access
+        public final Map<String, Object> data = new HashMap<>(); // ThreadLocal access
 
         @Deprecated
         public static final ThreadLocal<RouteArgs> current = new ThreadLocal<>();
@@ -589,15 +579,8 @@ public class Scope {
             return current.get();
         }
 
-        public void put(String key, Object arg) {
-            this.data.put(key, arg);
-        }
-
-        public Object get(String key) {
-            return data.get(key);
-        }
-
         @Override
+        @Nonnull
         public String toString() {
             return data.toString();
         }
