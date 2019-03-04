@@ -5,6 +5,8 @@ import play.data.binding.Binder;
 import play.mvc.Http;
 import play.mvc.Scope;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.*;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -90,11 +92,11 @@ public class Messages {
         return getMessage(locale, (k) -> k.toString(), key, args);
     }
 
-    public static String getMessage(String locale, Function<Object, String> defaultMessage, Object key, Object... args) {
+    public static String getMessage(@Nonnull String locale, @Nonnull Function<Object, String> defaultMessage, @Nullable Object key, Object... args) {
         // Check if there is a plugin that handles translation
-        String message = Play.pluginCollection.getMessage(locale, key, args);
-        if (message != null) {
-            return message;
+        Optional<String> message = Play.pluginCollection.getMessage(locale, key, args);
+        if (message.isPresent()) {
+            return message.get();
         }
 
         if (key == null || "".equals(key)) {
@@ -130,7 +132,7 @@ public class Messages {
         String message = String.format(locale, value, coolStuff(value, args));
 
         Matcher matcher = recursive.matcher(message);
-        StringBuffer sb = new StringBuffer();
+        StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
             matcher.appendReplacement(sb, get(matcher.group(1)));
         }

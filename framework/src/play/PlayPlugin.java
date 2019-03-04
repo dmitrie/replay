@@ -16,6 +16,7 @@ import javax.annotation.Nonnull;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
+import java.util.Optional;
 
 /**
  * A framework plugin
@@ -26,6 +27,16 @@ public abstract class PlayPlugin implements Comparable<PlayPlugin> {
      * Plugin priority (0 for highest priority)
      */
     public int index;
+
+    private boolean enabled = true;
+
+    protected void disable() {
+        enabled = false;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
 
     /**
      * Called at plugin loading
@@ -64,8 +75,8 @@ public abstract class PlayPlugin implements Comparable<PlayPlugin> {
      *            arguments of the messages
      * @return the formatted string
      */
-    public String getMessage(String locale, Object key, Object... args) {
-        return null;
+    public Optional<String> getMessage(String locale, Object key, Object... args) {
+        return Optional.empty();
     }
 
     /**
@@ -104,8 +115,8 @@ public abstract class PlayPlugin implements Comparable<PlayPlugin> {
      *            the file of the template to load
      * @return the template object
      */
-    public Template loadTemplate(VirtualFile file) {
-        return null;
+    public Optional<Template> loadTemplate(VirtualFile file) {
+        return Optional.empty();
     }
 
     /**
@@ -158,16 +169,8 @@ public abstract class PlayPlugin implements Comparable<PlayPlugin> {
      */
     public void beforeActionInvocation(Request request, Response response, Session session, RenderArgs renderArgs,
                                        Flash flash, Method actionMethod) {
-        beforeActionInvocation(request, response, session, renderArgs, actionMethod);
     }
 
-    /**
-     * @deprecated Use/override method with flash parameter
-     */
-    @Deprecated
-    public void beforeActionInvocation(Request request, Response response, Session session, RenderArgs renderArgs,
-                                       Method actionMethod) {
-    }
 
     /**
      * Called when the action method has thrown a result.
@@ -175,15 +178,17 @@ public abstract class PlayPlugin implements Comparable<PlayPlugin> {
      * @param result
      *            The result object for the request.
      */
-    public void onActionInvocationResult(Request request, Response response, Session session, RenderArgs renderArgs, Result result) {
-        onActionInvocationResult(request, response, renderArgs, result);
+    public void onActionInvocationResult(@Nonnull Request request, @Nonnull Response response,
+                                         @Nonnull Session session, @Nonnull Flash flash,
+                                         @Nonnull RenderArgs renderArgs, @Nonnull Result result) {
+        onActionInvocationResult(request, response, session, renderArgs, result);
     }
 
     /**
-     * @deprecated Use/override method with session parameter
+     * @deprecated Use/override method with flash parameter
      */
     @Deprecated
-    public void onActionInvocationResult(Request request, Response response, RenderArgs renderArgs, Result result) {
+    public void onActionInvocationResult(Request request, Response response, Session session, RenderArgs renderArgs, Result result) {
     }
 
     public void onInvocationSuccess() {
@@ -209,35 +214,12 @@ public abstract class PlayPlugin implements Comparable<PlayPlugin> {
     }
 
     /**
-     * Event may be sent by plugins or other components
-     * 
-     * @param message
-     *            convention: pluginClassShortName.message
-     * @param context
-     *            depends on the plugin
-     */
-    public void onEvent(String message, Object context) {
-    }
-
-    /**
      * Let some plugins route themselves
      *
      * @param request
      *            the current request
      */
     public void routeRequest(Request request) {
-    }
-
-    /**
-     * Inter-plugin communication.
-     * 
-     * @param message
-     *            the message to post
-     * @param context
-     *            an object
-     */
-    public static void postEvent(String message, Object context) {
-        Play.pluginCollection.onEvent(message, context);
     }
 
     @Override

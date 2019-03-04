@@ -2,9 +2,9 @@ package play.plugins;
 
 import org.junit.Before;
 import org.junit.Test;
-import play.ConfigurationChangeWatcherPlugin;
 import play.Play;
 import play.PlayBuilder;
+import play.PlayPlugin;
 import play.data.parsing.TempFilePlugin;
 import play.data.validation.ValidationPlugin;
 import play.db.DBPlugin;
@@ -13,7 +13,10 @@ import play.i18n.MessagesPlugin;
 import play.jobs.JobsPlugin;
 import play.libs.WS;
 
+import java.util.List;
+
 import static java.util.Arrays.asList;
+import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
@@ -34,12 +37,12 @@ public class PluginCollectionTest {
 
         // the following plugin-list should match the list in the file 'play.plugins'
         assertThat(pc.getEnabledPlugins()).containsExactly(
-                pc.getPluginInstance(ConfigurationChangeWatcherPlugin.class), pc.getPluginInstance(TempFilePlugin.class),
+                pc.getPluginInstance(TempFilePlugin.class),
                 pc.getPluginInstance(ValidationPlugin.class),
                 pc.getPluginInstance(DBPlugin.class), pc.getPluginInstance(play.db.DBBrowserPlugin.class),
                 pc.getPluginInstance(JPAPlugin.class),
                 pc.getPluginInstance(MessagesPlugin.class), pc.getPluginInstance(WS.class),
-                pc.getPluginInstance(JobsPlugin.class), pc.getPluginInstance(ConfigurablePluginDisablingPlugin.class),
+                pc.getPluginInstance(JobsPlugin.class),
                 pc.getPluginInstance(PlayStatusPlugin.class));
     }
 
@@ -98,9 +101,10 @@ public class PluginCollectionTest {
         PluginCollection pc = new PluginCollection();
         pc.loadPlugins();
 
-        assertThat(pc.getReversedEnabledPlugins()).hasSize(2);
-        assertThat(pc.getReversedEnabledPlugins().get(0).getClass()).isEqualTo(TestPlugin.class);
-        assertThat(pc.getReversedEnabledPlugins().get(1).getClass()).isEqualTo(PlayStatusPlugin.class);
+        List<PlayPlugin> reversedPlugins = pc.getReversedEnabledPlugins().collect(toList());
+        assertThat(reversedPlugins).hasSize(2);
+        assertThat(reversedPlugins.get(0).getClass()).isEqualTo(TestPlugin.class);
+        assertThat(reversedPlugins.get(1).getClass()).isEqualTo(PlayStatusPlugin.class);
     }
 
     @Test
@@ -113,3 +117,5 @@ public class PluginCollectionTest {
     }
 }
 
+class TestPlugin extends PlayPlugin {
+}

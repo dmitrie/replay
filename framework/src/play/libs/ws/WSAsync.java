@@ -1,25 +1,23 @@
 package play.libs.ws;
 
-import com.ning.http.client.*;
+import com.ning.http.client.AsyncCompletionHandler;
+import com.ning.http.client.AsyncHttpClient;
 import com.ning.http.client.AsyncHttpClient.BoundRequestBuilder;
+import com.ning.http.client.AsyncHttpClientConfig;
 import com.ning.http.client.AsyncHttpClientConfig.Builder;
+import com.ning.http.client.ProxyServer;
 import com.ning.http.client.Realm.AuthScheme;
 import com.ning.http.client.Realm.RealmBuilder;
+import com.ning.http.client.Response;
 import com.ning.http.client.multipart.ByteArrayPart;
 import com.ning.http.client.multipart.FilePart;
 import com.ning.http.client.multipart.Part;
-import oauth.signpost.AbstractOAuthConsumer;
-import oauth.signpost.exception.OAuthCommunicationException;
-import oauth.signpost.exception.OAuthExpectationFailedException;
-import oauth.signpost.exception.OAuthMessageSignerException;
-import oauth.signpost.http.HttpRequest;
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import play.Play;
-import play.libs.Promise;
 import play.libs.MimeTypes;
-import play.libs.OAuth.ServiceInfo;
+import play.libs.Promise;
 import play.libs.WS.HttpResponse;
 import play.libs.WS.WSImpl;
 import play.libs.WS.WSRequest;
@@ -27,13 +25,15 @@ import play.mvc.Http.Header;
 
 import javax.net.ssl.SSLContext;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.util.*;
+
+import static org.apache.commons.lang.StringUtils.isEmpty;
+import static org.apache.commons.lang.StringUtils.isNotEmpty;
 
 /**
  * Simple HTTP client to make webservices requests.
@@ -61,58 +61,62 @@ public class WSAsync implements WSImpl {
     private static final Logger logger = LoggerFactory.getLogger(WSAsync.class);
 
     private AsyncHttpClient httpClient;
-    private static SSLContext sslCTX = null;
 
     public WSAsync() {
-        String proxyHost = Play.configuration.getProperty("http.proxyHost", System.getProperty("http.proxyHost"));
-        String proxyPort = Play.configuration.getProperty("http.proxyPort", System.getProperty("http.proxyPort"));
-        String proxyUser = Play.configuration.getProperty("http.proxyUser", System.getProperty("http.proxyUser"));
-        String proxyPassword = Play.configuration.getProperty("http.proxyPassword", System.getProperty("http.proxyPassword"));
-        String nonProxyHosts = Play.configuration.getProperty("http.nonProxyHosts", System.getProperty("http.nonProxyHosts"));
         String userAgent = Play.configuration.getProperty("http.userAgent");
         String keyStore = Play.configuration.getProperty("ssl.keyStore", System.getProperty("javax.net.ssl.keyStore"));
         String keyStorePass = Play.configuration.getProperty("ssl.keyStorePassword", System.getProperty("javax.net.ssl.keyStorePassword"));
         Boolean CAValidation = Boolean.parseBoolean(Play.configuration.getProperty("ssl.cavalidation", "true"));
 
         Builder confBuilder = new AsyncHttpClientConfig.Builder();
-        if (proxyHost != null) {
-            int proxyPortInt = 0;
-            try {
-                proxyPortInt = Integer.parseInt(proxyPort);
-            } catch (NumberFormatException e) {
-                logger.error(
-                        "Cannot parse the proxy port property '{}'. Check property http.proxyPort either in System configuration or in Play config file.",
-                        proxyPort, e);
-                throw new IllegalStateException("WS proxy is misconfigured -- check the logs for details");
-            }
-            ProxyServer proxy = new ProxyServer(proxyHost, proxyPortInt, proxyUser, proxyPassword);
-            if (nonProxyHosts != null) {
-                String[] strings = nonProxyHosts.split("\\|");
-                for (String uril : strings) {
-                    proxy.addNonProxyHost(uril);
-                }
-            }
-            confBuilder.setProxyServer(proxy);
-        }
-        if (userAgent != null) {
+
+        buildProxy().ifPresent(proxy -> confBuilder.setProxyServer(proxy));
+
+        if (isNotEmpty(userAgent)) {
             confBuilder.setUserAgent(userAgent);
         }
 
-        if (keyStore != null && !keyStore.equals("")) {
-
+        if (isNotEmpty(keyStore)) {
             logger.info("Keystore configured, loading from '{}', CA validation enabled : {}", keyStore, CAValidation);
+            SSLContext sslCTX = WSSSLContext.getSslContext(keyStore, keyStorePass, CAValidation);
             logger.trace("Keystore password : {}, SSLCTX : {}", keyStorePass, sslCTX);
-
-            if (sslCTX == null) {
-                sslCTX = WSSSLContext.getSslContext(keyStore, keyStorePass, CAValidation);
-                confBuilder.setSSLContext(sslCTX);
-            }
+            confBuilder.setSSLContext(sslCTX);
         }
+
         // when using raw urls, AHC does not encode the params in url.
         // this means we can/must encode it(with correct encoding) before
         // passing it to AHC
         confBuilder.setDisableUrlEncodingForBoundedRequests(true);
         httpClient = new AsyncHttpClient(confBuilder.build());
+    }
+
+    private Optional<ProxyServer> buildProxy() {
+        String proxyHost = Play.configuration.getProperty("http.proxyHost", System.getProperty("http.proxyHost"));
+        if (isEmpty(proxyHost)) return Optional.empty();
+
+        String proxyPort = Play.configuration.getProperty("http.proxyPort", System.getProperty("http.proxyPort"));
+        String proxyUser = Play.configuration.getProperty("http.proxyUser", System.getProperty("http.proxyUser"));
+        String proxyPassword = Play.configuration.getProperty("http.proxyPassword", System.getProperty("http.proxyPassword"));
+        String nonProxyHosts = Play.configuration.getProperty("http.nonProxyHosts", System.getProperty("http.nonProxyHosts"));
+
+        ProxyServer proxy = new ProxyServer(proxyHost, parseProxyPort(proxyPort), proxyUser, proxyPassword);
+        if (isNotEmpty(nonProxyHosts)) {
+            for (String url : nonProxyHosts.split("\\|")) {
+                proxy.addNonProxyHost(url);
+            }
+        }
+        return Optional.of(proxy);
+    }
+
+    private int parseProxyPort(String proxyPort) {
+        try {
+            return Integer.parseInt(proxyPort);
+        } catch (NumberFormatException e) {
+            logger.error(
+              "Cannot parse the proxy port property '{}'. Check property http.proxyPort either in System configuration or in Play config file.",
+              proxyPort, e);
+            throw new IllegalStateException("WS proxy is misconfigured -- check the logs for details");
+        }
     }
 
     @Override
@@ -250,7 +254,6 @@ public class WSAsync implements WSImpl {
         @Override
         public HttpResponse get() {
             this.type = "GET";
-            sign();
             try {
                 return new HttpAsyncResponse(prepare(prepareGet()).execute().get());
             } catch (Exception e) {
@@ -262,7 +265,6 @@ public class WSAsync implements WSImpl {
         @Override
         public Promise<HttpResponse> getAsync() {
             this.type = "GET";
-            sign();
             return execute(prepareGet());
         }
 
@@ -270,7 +272,6 @@ public class WSAsync implements WSImpl {
         @Override
         public HttpResponse patch() {
             this.type = "PATCH";
-            sign();
             try {
                 return new HttpAsyncResponse(prepare(preparePatch()).execute().get());
             } catch (Exception e) {
@@ -282,7 +283,6 @@ public class WSAsync implements WSImpl {
         @Override
         public Promise<HttpResponse> patchAsync() {
             this.type = "PATCH";
-            sign();
             return execute(preparePatch());
         }
 
@@ -290,7 +290,6 @@ public class WSAsync implements WSImpl {
         @Override
         public HttpResponse post() {
             this.type = "POST";
-            sign();
             try {
                 return new HttpAsyncResponse(prepare(preparePost()).execute().get());
             } catch (Exception e) {
@@ -302,7 +301,6 @@ public class WSAsync implements WSImpl {
         @Override
         public Promise<HttpResponse> postAsync() {
             this.type = "POST";
-            sign();
             return execute(preparePost());
         }
 
@@ -390,18 +388,6 @@ public class WSAsync implements WSImpl {
         public Promise<HttpResponse> traceAsync() {
             this.type = "TRACE";
             throw new NotImplementedException();
-        }
-
-        private WSRequest sign() {
-            if (this.oauthToken != null && this.oauthSecret != null) {
-                WSOAuthConsumer consumer = new WSOAuthConsumer(oauthInfo, oauthToken, oauthSecret);
-                try {
-                    consumer.sign(this, this.type);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            }
-            return this;
         }
 
         private BoundRequestBuilder prepare(BoundRequestBuilder builder) {
@@ -699,94 +685,4 @@ public class WSAsync implements WSImpl {
         }
 
     }
-
-    private static class WSOAuthConsumer extends AbstractOAuthConsumer {
-
-        public WSOAuthConsumer(String consumerKey, String consumerSecret) {
-            super(consumerKey, consumerSecret);
-        }
-
-        public WSOAuthConsumer(ServiceInfo info, String token, String secret) {
-            super(info.consumerKey, info.consumerSecret);
-            setTokenWithSecret(token, secret);
-        }
-
-        @Override
-        protected HttpRequest wrap(Object request) {
-            if (!(request instanceof WSRequest)) {
-                throw new IllegalArgumentException("WSOAuthConsumer expects requests of type play.libs.WS.WSRequest");
-            }
-            return new WSRequestAdapter((WSRequest) request);
-        }
-
-        public WSRequest sign(WSRequest request, String method)
-                throws OAuthMessageSignerException, OAuthExpectationFailedException, OAuthCommunicationException {
-            WSRequestAdapter req = (WSRequestAdapter) wrap(request);
-            req.setMethod(method);
-            sign(req);
-            return request;
-        }
-
-        public class WSRequestAdapter implements HttpRequest {
-
-            private WSRequest request;
-            private String method;
-
-            public WSRequestAdapter(WSRequest request) {
-                this.request = request;
-            }
-
-            @Override
-            public Map<String, String> getAllHeaders() {
-                return request.headers;
-            }
-
-            @Override
-            public String getContentType() {
-                return request.mimeType;
-            }
-
-            @Override
-            public Object unwrap() {
-                return null;
-            }
-
-            @Override
-            public String getHeader(String name) {
-                return request.headers.get(name);
-            }
-
-            @Override
-            public InputStream getMessagePayload() throws IOException {
-                return null;
-            }
-
-            @Override
-            public String getMethod() {
-                return this.method;
-            }
-
-            private void setMethod(String method) {
-                this.method = method;
-            }
-
-            @Override
-            public String getRequestUrl() {
-                return request.url;
-            }
-
-            @Override
-            public void setHeader(String name, String value) {
-                request.setHeader(name, value);
-            }
-
-            @Override
-            public void setRequestUrl(String url) {
-                request.url = url;
-            }
-
-        }
-
-    }
-
 }

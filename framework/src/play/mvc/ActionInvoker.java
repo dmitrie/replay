@@ -41,6 +41,8 @@ import java.util.Map;
 public class ActionInvoker {
     private static final Logger logger = LoggerFactory.getLogger(ActionInvoker.class);
 
+    private final FlashStore flashStore = new FlashStore();
+
     @SuppressWarnings("unchecked")
     public static void resolve(Http.Request request) {
 
@@ -61,9 +63,8 @@ public class ActionInvoker {
 
         // Find the action method
         try {
-            Method actionMethod;
             Object[] ca = getActionMethod(request.action);
-            actionMethod = (Method) ca[1];
+            Method actionMethod = (Method) ca[1];
             request.controller = ((Class) ca[0]).getName().substring(12).replace("$", "");
             request.controllerClass = ((Class) ca[0]);
             request.actionMethod = actionMethod.getName();
@@ -94,12 +95,16 @@ public class ActionInvoker {
         CachedBoundActionMethodArgs.init();
     }
 
-    public static void invoke(Http.Request request, Http.Response response) {
+    public void invoke(Http.Request request, Http.Response response) {
         Monitor monitor = null;
         Session session = Session.restore(request);
-        Flash flash = Flash.restore(request);
+        Flash flash = flashStore.restore(request);
         RenderArgs renderArgs = new RenderArgs();
         initActionContext(request, response, session, renderArgs, flash);
+
+        if (!Modifier.isStatic(request.invokedMethod.getModifiers())) {
+            request.controllerInstance = Injector.getBeanOfType(request.controllerClass);
+        }
 
         try {
             Method actionMethod = request.invokedMethod;
@@ -170,13 +175,10 @@ public class ActionInvoker {
         }
     }
 
-    private static void applyResult(Http.Request request, Http.Response response, Session session, Flash flash, RenderArgs renderArgs, Result result) {
-        Play.pluginCollection.onActionInvocationResult(request, response, session, renderArgs, result);
+    private void applyResult(Http.Request request, Http.Response response, Session session, Flash flash, RenderArgs renderArgs, Result result) {
+        Play.pluginCollection.onActionInvocationResult(request, response, session, flash, renderArgs, result);
 
-        // OK there is a result to apply
-        // Save session & flash scope now
         session.save(request, response);
-        flash.save(request, response);
 
         try {
             result.apply(request, response, session, renderArgs, flash);
@@ -195,7 +197,11 @@ public class ActionInvoker {
 
         Play.pluginCollection.afterActionInvocation(request, response, flash);
 
-        // @Finally
+        // It's important to send "flash" and "session" cookies to browser AFTER html is applied.
+        // Because sometimes html does change flash.
+        // For example, some html might execute %{flash.discard('info')}%`
+        flashStore.save(flash, request, response);
+
         handleFinallies(request, session, null);
     }
 
@@ -413,14 +419,10 @@ public class ActionInvoker {
     static Object invokeControllerMethod(Http.Request request, Session session, Method method, Object[] forceArgs) throws Exception {
         boolean isStatic = Modifier.isStatic(method.getModifiers());
 
-        if (!isStatic && request.controllerInstance == null) {
-            request.controllerInstance = Injector.getBeanOfType(request.controllerClass);
-        }
-
         Object[] args = forceArgs != null ? forceArgs : getActionMethodArgs(request, session, method);
 
         Object methodClassInstance = isStatic ? null :
-            (method.getDeclaringClass().isAssignableFrom(request.controllerClass)) ? request.controllerInstance :
+           (method.getDeclaringClass().isAssignableFrom(request.controllerClass)) ? request.controllerInstance :
                 Injector.getBeanOfType(method.getDeclaringClass());
 
         return invoke(method, methodClassInstance, args);
