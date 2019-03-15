@@ -1,8 +1,8 @@
 package play.templates;
 
 import groovy.lang.Closure;
+import groovy.lang.MissingPropertyException;
 import org.apache.commons.beanutils.PropertyUtils;
-import org.apache.commons.lang.StringUtils;
 import org.codehaus.groovy.runtime.NullObject;
 import play.cache.Cache;
 import play.data.validation.Error;
@@ -16,8 +16,8 @@ import play.mvc.Router.ActionDefinition;
 import play.mvc.Scope.Flash;
 import play.mvc.Scope.Session;
 import play.templates.BaseTemplate.RawData;
-import play.utils.HTML;
 
+import javax.annotation.Nullable;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.annotation.ElementType;
@@ -93,7 +93,11 @@ public class FastTags {
     }
 
     public static void _authenticityToken(Map<?, ?> args, Closure body, PrintWriter out, ExecutableTemplate template, int fromLine) {
-        out.println("<input type=\"hidden\" name=\"authenticityToken\" value=\"" + Session.current().getAuthenticityToken() + "\"/>");
+        out.printf("<input type=\"hidden\" name=\"authenticityToken\" value=\"%s\"/>\n", session(template).getAuthenticityToken());
+    }
+
+    private static Session session(ExecutableTemplate template) {
+        return (Session) template.getProperty("session");
     }
 
     public static void _option(Map<?, ?> args, Closure body, PrintWriter out, ExecutableTemplate template, int fromLine) {
@@ -178,9 +182,7 @@ public class FastTags {
         String _arg = args.get("arg").toString();
         field.put("name", _arg);
         field.put("id", _arg.replace('.', '_'));
-        field.put("flash", Flash.current().get(_arg));
-        field.put("flashArray", field.get("flash") != null && !StringUtils.isEmpty(field.get("flash").toString()) ? field.get("flash")
-                .toString().split(",") : new String[0]);
+        field.put("flash", getArgValueFromFlash(template, _arg));
         field.put("error", Validation.error(_arg));
         field.put("errorClass", field.get("error") != null ? "hasError" : "");
         String[] pieces = _arg.split("\\.");
@@ -201,6 +203,16 @@ public class FastTags {
         }
         body.setProperty("field", field);
         body.call();
+    }
+
+    @Nullable
+    private static String getArgValueFromFlash(ExecutableTemplate template, String _arg) {
+        try {
+            return ((Flash) template.getProperty("flash")).get(_arg);
+        }
+        catch (MissingPropertyException flashIsNotBoundAndIamFineWithIt) {
+            return null;
+        }
     }
 
     /**

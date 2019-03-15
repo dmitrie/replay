@@ -32,8 +32,6 @@ import static java.util.Arrays.asList;
  * All application Scopes
  */
 public class Scope {
-    private static final SessionDataEncoder encoder = new SessionDataEncoder();
-
     private static final Logger logger = LoggerFactory.getLogger(Scope.class);
 
     public static final String COOKIE_PREFIX = Play.configuration.getProperty("application.session.cookie", "PLAY");
@@ -73,15 +71,6 @@ public class Scope {
 
         Flash(Map<String, String> data) {
             this.data = data;
-        }
-
-        @Deprecated
-        public static final ThreadLocal<Flash> current = new ThreadLocal<>();
-
-        @Deprecated
-        @Nonnull
-        public static Flash current() {
-            return current.get();
         }
 
         public void put(@Nonnull String key, @Nullable String value) {
@@ -194,21 +183,8 @@ public class Scope {
             return session;
         }
 
-        Map<String, String> data = new HashMap<>(); // ThreadLocal access
+        Map<String, String> data = new HashMap<>();
         boolean changed;
-
-        @Deprecated
-        public static final ThreadLocal<Session> current = new ThreadLocal<>();
-
-        @Deprecated
-        @Nullable
-        public static Session current() {
-            return current.get();
-        }
-
-        public static void removeCurrent() {
-            current.remove();
-        }
 
         @Nonnull
         public String getId() {
@@ -322,19 +298,6 @@ public class Scope {
      * HTTP params
      */
     public static class Params {
-        private static final ThreadLocal<Params> current = new ThreadLocal<>();
-
-        @Deprecated
-        @Nonnull
-        public static Params current() {
-            return current.get();
-        }
-
-        @Deprecated
-        public static void setCurrent(@Nonnull Params params) {
-            current.set(params);
-        }
-
         public Params(@Nonnull Http.Request request) {
             this.request = request;
         }
@@ -509,28 +472,6 @@ public class Scope {
         @Nullable @SuppressWarnings("unchecked")
         public <T> T get(String key, Class<T> clazz) {
             return (T) this.get(key);
-        }
-
-        @Override
-        @Nonnull
-        public String toString() {
-            return data.toString();
-        }
-    }
-
-    /**
-     * Routes args (used in reserve routing)
-     */
-    public static class RouteArgs {
-
-        public final Map<String, Object> data = new HashMap<>(); // ThreadLocal access
-
-        @Deprecated
-        public static final ThreadLocal<RouteArgs> current = new ThreadLocal<>();
-
-        @Deprecated
-        public static RouteArgs current() {
-            return current.get();
         }
 
         @Override
