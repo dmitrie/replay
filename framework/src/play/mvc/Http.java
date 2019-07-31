@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.lang.reflect.Method;
+import java.nio.charset.Charset;
 import java.text.ParseException;
 import java.util.*;
 import java.util.function.Consumer;
@@ -114,15 +115,6 @@ public class Http {
      * An HTTP Cookie
      */
     public static class Cookie implements Serializable {
-
-        /**
-         * When creating cookie without specifying domain, this value is used. Can be configured using the property
-         * 'application.defaultCookieDomain' in application.conf.
-         *
-         * This feature can be used to allow sharing session/cookies between multiple sub domains.
-         */
-        public static String defaultDomain;
-
         /**
          * Cookie name
          */
@@ -211,7 +203,7 @@ public class Http {
          * This is the encoding used to decode this request. If encoding-info is not found in request, then
          * Play.defaultWebEncoding is used
          */
-        public String encoding = Play.defaultWebEncoding;
+        public Charset encoding = Play.defaultWebEncoding;
         /**
          * Controller to invoke
          */
@@ -647,7 +639,8 @@ public class Http {
         /**
          * The encoding used when writing response to client
          */
-        public String encoding = Play.defaultWebEncoding;
+        public Charset encoding = Play.defaultWebEncoding;
+
         /**
          * Bind to thread
          */
@@ -779,8 +772,6 @@ public class Http {
                 cookie.httpOnly = httpOnly;
                 if (domain != null) {
                     cookie.domain = domain;
-                } else {
-                    cookie.domain = Cookie.defaultDomain;
                 }
                 if (maxAge != null) {
                     cookie.maxAge = maxAge;

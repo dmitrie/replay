@@ -13,6 +13,8 @@ import play.exceptions.UnexpectedException;
 import play.mvc.Http;
 import play.mvc.Scope.Session;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
@@ -21,11 +23,13 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.text.ParseException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.commons.lang.StringUtils.isBlank;
 
 /**
@@ -36,7 +40,7 @@ public abstract class Binder {
 
     public static final Object MISSING = new Object();
     private static final Object DIRECTBINDING_NO_RESULT = new Object();
-    public static final Object NO_BINDING = new Object();
+    private static final Object NO_BINDING = new Object();
 
     static final Map<Class<?>, TypeBinder<?>> supportedTypes = new HashMap<>();
 
@@ -73,8 +77,8 @@ public abstract class Binder {
      *            The Class type to register
      * @see #unregister(Class)
      */
-    public static <T> void register(Class<T> clazz, TypeBinder<T> typeBinder) {
-        supportedTypes.put(clazz, typeBinder);
+    public static <T> void register(@Nonnull Class<T> clazz, @Nonnull TypeBinder<T> typeBinder) {
+        supportedTypes.put(checkNotNull(clazz), checkNotNull(typeBinder));
     }
 
     /**
@@ -85,13 +89,14 @@ public abstract class Binder {
      * @param <T>
      *            The Class type to register
      */
-    public static <T> void unregister(Class<T> clazz) {
-        supportedTypes.remove(clazz);
+    public static <T> void unregister(@Nonnull Class<T> clazz) {
+        supportedTypes.remove(checkNotNull(clazz));
     }
 
     static Map<Class<?>, BeanWrapper> beanwrappers = new HashMap<>();
 
-    static BeanWrapper getBeanWrapper(Class<?> clazz) {
+    static BeanWrapper getBeanWrapper(@Nonnull Class<?> clazz) {
+        checkNotNull(clazz);
         if (!beanwrappers.containsKey(clazz)) {
             BeanWrapper beanwrapper = new BeanWrapper(clazz);
             beanwrappers.put(clazz, beanwrapper);
@@ -99,6 +104,7 @@ public abstract class Binder {
         return beanwrappers.get(clazz);
     }
 
+    @Nullable
     public static Object bind(Http.Request request, Session session, RootParamNode parentParamNode, String name, Class<?> clazz, Type type, Annotation[] annotations) {
         ParamNode paramNode = parentParamNode.getChild(name, true);
 
@@ -153,13 +159,14 @@ public abstract class Binder {
 
     }
 
-    protected static Object internalBind(Http.Request request, Session session, ParamNode paramNode, Class<?> clazz, Type type, BindingAnnotations bindingAnnotations) {
+    @Nullable
+    private static Object internalBind(Http.Request request, Session session, ParamNode paramNode, Class<?> clazz, Type type, BindingAnnotations bindingAnnotations) {
 
         if (paramNode == null) {
             return MISSING;
         }
 
-        if (paramNode.getValues() == null && paramNode.getAllChildren().size() == 0) {
+        if (paramNode.getValues() == null && paramNode.getAllChildren().isEmpty()) {
             return MISSING;
         }
 
@@ -284,7 +291,7 @@ public abstract class Binder {
         return bean;
     }
 
-    private static <T> T createNewInstance(Class<T> clazz) {
+    private static <T> T createNewInstance(@Nonnull Class<T> clazz) {
         try {
             Constructor<T> constructor = clazz.getDeclaredConstructor();
             constructor.setAccessible(true);
@@ -334,6 +341,7 @@ public abstract class Binder {
     }
 
     @SuppressWarnings("unchecked")
+    @Nullable
     private static Object bindEnum(Class<?> clazz, ParamNode paramNode) {
         if (paramNode.getValues() == null) {
             return MISSING;
@@ -453,14 +461,11 @@ public abstract class Binder {
             List l = (List) r;
 
             // must get all indexes and sort them so we add items in correct order.
-            Set<String> indexes = new TreeSet<>(new Comparator<String>() {
-                @Override
-                public int compare(String arg0, String arg1) {
-                    try {
-                        return Integer.parseInt(arg0) - Integer.parseInt(arg1);
-                    } catch (NumberFormatException e) {
-                        return arg0.compareTo(arg1);
-                    }
+            Set<String> indexes = new TreeSet<>((arg0, arg1) -> {
+                try {
+                    return Integer.valueOf(arg0).compareTo(Integer.valueOf(arg1));
+                } catch (NumberFormatException e) {
+                    return arg0.compareTo(arg1);
                 }
             });
             indexes.addAll(paramNode.getAllChildrenKeys());
@@ -500,25 +505,6 @@ public abstract class Binder {
     }
 
     /**
-     * Bind a object
-     * 
-     * @param annotations
-     *            annotation on the object
-     * @param value
-     *            value to bind
-     * @param clazz
-     *            class of the object
-     * @param type
-     *            type to bind
-     * @return The binding object
-     * @throws ParseException
-     *             if problem occurred during binding
-     */
-    public static Object directBind(Http.Request request, Session session, Annotation[] annotations, String value, Class<?> clazz, Type type) throws ParseException {
-        return directBind(null, request, session, annotations, value, clazz, type);
-    }
-
-    /**
      * This method calls the user's defined binders prior to bind simple type
      * 
      * @param name
@@ -533,6 +519,7 @@ public abstract class Binder {
      *            type to bind
      * @return The binding object
      */
+    @Nullable
     public static Object directBind(String name, Http.Request request, Session session, Annotation[] annotations, String value, Class<?> clazz, Type type) throws ParseException {
         // calls the direct binding and returns null if no value could be resolved..
         Object r = internalDirectBind(name, request, session, annotations, value, clazz, type);
@@ -545,6 +532,7 @@ public abstract class Binder {
 
     // If internalDirectBind was not able to bind it, it returns a special variable instance: DIRECTBIND_MISSING
     // Needs this because sometimes we need to know if no value was returned..
+    @Nullable
     private static Object internalDirectBind(String name, Http.Request request, Session session, Annotation[] annotations, String value, Class<?> clazz, Type type)
             throws ParseException {
         boolean nullOrEmpty = isBlank(value);
@@ -577,7 +565,7 @@ public abstract class Binder {
 
         // custom types
         for (Class<?> c : supportedTypes.keySet()) {
-            logger.trace("directBind: value [{}] c [" + c + "] Class [" + clazz + "]", value);
+            logger.trace("directBind: value [{}] c [{}] Class [{}]", value, c, clazz);
 
             if (c.isAssignableFrom(clazz)) {
                 logger.trace("directBind: isAssignableFrom is true");
@@ -601,52 +589,52 @@ public abstract class Binder {
         }
 
         // int or Integer binding
-        if (clazz.getName().equals("int") || clazz.equals(Integer.class)) {
+        if ("int".equals(clazz.getName()) || clazz.equals(Integer.class)) {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0 : null;
             }
 
-            return Integer.parseInt(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
+            return Integer.parseInt(value.contains(".") ? value.substring(0, value.indexOf('.')) : value);
         }
 
         // long or Long binding
-        if (clazz.getName().equals("long") || clazz.equals(Long.class)) {
+        if ("long".equals(clazz.getName()) || clazz.equals(Long.class)) {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0L : null;
             }
 
-            return Long.parseLong(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
+            return Long.parseLong(value.contains(".") ? value.substring(0, value.indexOf('.')) : value);
         }
 
         // byte or Byte binding
-        if (clazz.getName().equals("byte") || clazz.equals(Byte.class)) {
+        if ("byte".equals(clazz.getName()) || clazz.equals(Byte.class)) {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? (byte) 0 : null;
             }
 
-            return Byte.parseByte(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
+            return Byte.parseByte(value.contains(".") ? value.substring(0, value.indexOf('.')) : value);
         }
 
         // short or Short binding
-        if (clazz.getName().equals("short") || clazz.equals(Short.class)) {
+        if ("short".equals(clazz.getName()) || clazz.equals(Short.class)) {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? (short) 0 : null;
             }
 
-            return Short.parseShort(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
+            return Short.parseShort(value.contains(".") ? value.substring(0, value.indexOf('.')) : value);
         }
 
         // float or Float binding
-        if (clazz.getName().equals("float") || clazz.equals(Float.class)) {
+        if ("float".equals(clazz.getName()) || clazz.equals(Float.class)) {
             if (nullOrEmpty) {
-                return clazz.isPrimitive() ? 0f : null;
+                return clazz.isPrimitive() ? 0.0f : null;
             }
 
             return Float.parseFloat(value);
         }
 
         // double or Double binding
-        if (clazz.getName().equals("double") || clazz.equals(Double.class)) {
+        if ("double".equals(clazz.getName()) || clazz.equals(Double.class)) {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0.0d : null;
             }
@@ -659,13 +647,18 @@ public abstract class Binder {
             return nullOrEmpty ? null : new BigDecimal(value);
         }
 
+        // BigInteger binding
+        if (clazz.equals(BigInteger.class)) {
+            return nullOrEmpty ? null : new BigInteger(value);
+        }
+
         // boolean or Boolean binding
-        if (clazz.getName().equals("boolean") || clazz.equals(Boolean.class)) {
+        if ("boolean".equals(clazz.getName()) || clazz.equals(Boolean.class)) {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? false : null;
             }
 
-            if (value.equals("1") || value.toLowerCase().equals("on") || value.toLowerCase().equals("yes")) {
+            if ("1".equals(value) || "on".equals(value.toLowerCase()) || "yes".equals(value.toLowerCase())) {
                 return true;
             }
 

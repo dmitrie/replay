@@ -8,7 +8,6 @@ import play.inject.DefaultBeanSource;
 import play.inject.Injector;
 import play.jobs.Job;
 import play.libs.IO;
-import play.mvc.Http;
 import play.mvc.PlayController;
 import play.mvc.Router;
 import play.plugins.PluginCollection;
@@ -22,8 +21,10 @@ import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.nio.charset.Charset;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * Main framework class
@@ -63,10 +64,6 @@ public class Play {
      * All paths to search for files
      */
     public static List<VirtualFile> roots = new ArrayList<>(16);
-    /**
-     * All paths to search for Java files
-     */
-    public static List<VirtualFile> javaPath = new CopyOnWriteArrayList<>();
     /**
      * All paths to search for templates files
      */
@@ -110,7 +107,7 @@ public class Play {
     /**
      * This is used as default encoding everywhere related to the web: request, response, WS
      */
-    public static String defaultWebEncoding = "utf-8";
+    public static final Charset defaultWebEncoding = UTF_8;
 
     public static Invoker invoker;
 
@@ -183,10 +180,6 @@ public class Play {
         roots.clear();
         roots.add(appRoot);
 
-        javaPath.clear();
-        javaPath.add(appRoot.child("app"));
-        javaPath.add(appRoot.child("conf"));
-
         // Build basic templates path
         templatesPath.clear();
         if (appRoot.child("app/views").exists() || (usePrecompiled && appRoot.child("precompiled/templates/app/views").exists())) {
@@ -196,12 +189,6 @@ public class Play {
         routes = appRoot.child("conf/routes");
         modulesRoutes.clear();
         loadModules(appRoot);
-
-        // Default cookie domain
-        Http.Cookie.defaultDomain = configuration.getProperty("application.defaultCookieDomain", null);
-        if (Http.Cookie.defaultDomain != null) {
-            logger.info("Using default cookie domain: {}", Http.Cookie.defaultDomain);
-        }
 
         pluginCollection.loadPlugins();
         Play.invoker = new Invoker();
@@ -232,7 +219,6 @@ public class Play {
             initLangs();
             TemplateLoader.cleanCompiledCache();
             initSecretKey();
-            initDefaultWebEncoding();
             Router.detectChanges();
             Cache.init();
             pluginCollection.onApplicationStart();
@@ -307,20 +293,6 @@ public class Play {
         }
     }
 
-    private static void initDefaultWebEncoding() {
-        String _defaultWebEncoding = configuration.getProperty("application.web_encoding");
-        if (_defaultWebEncoding != null) {
-            logger.info("Using custom default web encoding: {}", _defaultWebEncoding);
-            defaultWebEncoding = _defaultWebEncoding;
-            // Must update current response also, since the request/response triggering
-            // this configuration-loading in dev-mode have already been
-            // set up with the previous encoding
-            if (Http.Response.current() != null) {
-                Http.Response.current().encoding = _defaultWebEncoding;
-            }
-        }
-    }
-
     private void stop() {
         if (started) {
             logger.info("Stopping the play application");
@@ -353,7 +325,7 @@ public class Play {
                 } else if (module.isDirectory()) {
                     addModule(appRoot, module.getName(), module);
                 } else {
-                    File modulePath = new File(IO.readContentAsString(module).trim());
+                    File modulePath = new File(IO.readContentAsString(module, UTF_8).trim());
                     if (!modulePath.exists() || !modulePath.isDirectory()) {
                         logger.error("Module {} will not be loaded because {} does not exist", module.getName(), modulePath.getAbsolutePath());
                     } else {
@@ -377,9 +349,6 @@ public class Play {
     private void addModule(VirtualFile appRoot, String name, File path) {
         VirtualFile root = VirtualFile.open(path);
         modules.put(name, root);
-        if (root.child("app").exists()) {
-            javaPath.add(root.child("app"));
-        }
         if (root.child("app/views").exists()
                 || (usePrecompiled && appRoot.child("precompiled/templates/from_module_" + name + "/app/views").exists())) {
             templatesPath.add(root.child("app/views"));
